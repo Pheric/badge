@@ -1,10 +1,10 @@
+import math
+
 import machine
 import time
-import utime
 import neopixel
 from notes import *
 import random
-import urandom
 
 import esp32
 
@@ -27,236 +27,246 @@ t1.config(thresh)
 t2.config(thresh)
 t3.config(thresh)
 
+pins = [t0, t1, t2, t3]
+
 np = neopixel.NeoPixel(machine.Pin(25), 10)
-#np = neopixel.NeoPixel(machine.Pin(25), 10, bpp=4)
+# np = neopixel.NeoPixel(machine.Pin(25), 10, bpp=4)
 
 hx = machine.Pin(27, machine.Pin.PULL_UP)
 
 esp32.wake_on_touch(True)
 
 
-# This function controls adding colors to the neopixel strip
-def stackColor(key):
-    global colors
+theme = []
+muted = False
+def initial():
+    onReset()
 
-    if key == 1:
-        colors.insert(0,(50,0,0))
-    if key == 2:
-        colors.insert(0,(0,50,0))
-    if key == 3:
-        colors.insert(0,(0,0,50))
-    if key == 4:
-        colors.insert(0,(40,40,0))
+    for i in range(10):
+        np[i] = (0, 0, 0)
 
-    print(colors)
-    
-    size = len(colors)
-    if size > 10:
-        size = 10
-        colors.pop()
-
-    for i in range(0, size): 
-        np[i] = colors[i]
-
+    print("Theme menu\n(-?) (+r) (+g) (+b)")
+    global theme
+    theme = pickTheme()
+    print("Chosen: %s" % theme)
+    onSuccess()
+    for i in range(10):
+        np[i] = theme
     np.write()
 
-# Dimming to save battery life
-def dimColors():
-    global colors
-    for i in range(10):
-        if colors[i] == (50,0,0):
-            np[i] = (2,0,0)
-        elif colors[i] == (0,50,0):
-            np[i] = (0,2,0)
-        elif colors[i] == (0,0,50):
-            np[i] = (0,0,2)
-        elif colors[i] == (40,40,0):
-            np[i] = (2,2,0)
-        np.write()
-
-# Program starts here
-def keys():
-    global thresh
-    start = utime.time()
-    dim = False
-    dOff = False
-    wait = False
-
     while True:
-        try:
-            if t0.read() < thresh and t1.read() < thresh and t2.read() < thresh and t3.read() < thresh:
-                party()
-            if t0.read() < thresh:
-                time.sleep(0.02)
-                if t0.read() < thresh:
-                    setTone(1)
-                start = utime.time()            
-                if wait:
-                    machine.freq(40000000)
-                dim = False
-                dOff = False
-                wait = False
-            elif t1.read() < thresh:
-                time.sleep(0.02)
-                if t1.read() < thresh:
-                    setTone(2)
-                start = utime.time()            
-                if wait:
-                    machine.freq(40000000)
-                dim = False
-                dOff = False
-                wait = False
-            elif t2.read() < thresh:
-                time.sleep(0.02)
-                if t2.read() < thresh:
-                    setTone(3)
-                start = utime.time()            
-                if wait:
-                    machine.freq(40000000)
-                dim = False
-                dOff = False
-                wait = False
-            elif t3.read() < thresh:
-                time.sleep(0.02)
-                if t3.read() < thresh:
-                    setTone(4)
-                start = utime.time()            
-                if wait:
-                    machine.freq(40000000)
-                dim = False
-                dOff = False
-                wait = False
-            else:
-                setTone(0)
+        if touched(2, 3):
+            zelda()
 
-            if not pin16:
-                flash()
-
-            if ( utime.time() - start) > 30 and not dim and not wait:
-                print("Dimming")    
-                dim = True
-                dimColors()
-            if ( utime.time() - start) > 120 and not dOff and not wait:
-                print("Display Off")
-                dOff = True
-                for i in range(10):
-                    np[i] = (0,0,0)
-                    time.sleep(0.02)
-                    np.write()
-                #start = utime.time()            
-                wait = True
-                machine.freq(20000000)
-
-            # This bit of code takes the current consumption to ~4mA
-            # but it causes a bit of delay to wake up from sleep
-            # If that annoys you take it out and sleep will be ~14mA
-            if wait:
-                machine.sleep(1000)
-
-        except ValueError:
-            f = open('silent.txt', 'w')
-            f.write('t')
-            f.close()
-            machine.reset()
-
-def party():
-    print("Big american party!")
-    setTone(0)
-    if t0.read() < thresh and t1.read() < thresh and t2.read() < thresh and t3.read() < thresh:
-        while t0.read() < thresh:
-            print("Move your fat fingers") 
-    while True:
-        for i in range(10):
-            choice = urandom.randint(0,4)
-            if choice == 0:
-                np[i] = (255,0,0)
-            if choice == 1:
-                np[i] = (0,255,0)
-            if choice == 2:
-                np[i] = (0,0,255)
-            if choice == 3:
-                np[i] = (200,200,0)
-            if choice == 4:
-                np[i] = (0,0,0)
-            #np[i] = (urandom.randint(0,255),urandom.randint(0,255),urandom.randint(0,255))
+            for i in range(10):
+                np[i] = theme
             np.write()
-            time.sleep(0.05)
-            if t0.read() < thresh and t1.read() < thresh and t2.read() < thresh and t3.read() < thresh:
-                while t0.read() < thresh:
-                    print("Move your fat fingers") 
-                keys()
+        elif touched(0, 3):
+            global muted
+            muted = not muted
+            play_note(F5, .2, False)
+            onSuccess()
+
+            for i in range(10):
+                np[i] = theme
+            np.write()
 
 
-# Contols the piezo speaker
-def setTone(key):
-    global current
-    if key == 0:
-        speaker.duty(0)
-        current = 0
-    elif key == 1 and current != key:
-        stackColor(1)
-        print("1")
-        speaker.duty(100)
-        speaker.freq(G4)
-        current = 1
-    elif key == 2 and current != key:
-        stackColor(2)
-        print("2")
-        speaker.duty(100)
-        speaker.freq(B4)
-        current = 2
-    elif key == 3 and current != key:
-        stackColor(3)
-        print("3")
-        speaker.duty(100)
-        speaker.freq(CS5)
-        current = 3
-    elif key == 4 and current != key:
-        stackColor(4)
-        print("4")
-        speaker.duty(100)
-        speaker.freq(D5)
-        current = 4
+def pickTheme():
+    rgb = [10, 100, 50]
+    lim = False
+    while True:
+        if touched(0, 1, 2, 3):
+            break
+        elif touched(0, 1):
+            if rgb[0] > 0:
+                rgb[0] -= 1
+                lim = False
+            else:
+                lim = True
+        elif touched(1):
+            if rgb[0] < 255:
+                rgb[0] += 1
+                lim = False
+            else:
+                lim = True
+        elif touched(0, 2):
+            if rgb[1] > 0:
+                rgb[1] -= 1
+                lim = False
+            else:
+                lim = True
+        elif touched(2):
+            if rgb[1] < 255:
+                rgb[1] += 1
+                lim = False
+            else:
+                lim = True
+        elif touched(0, 3):
+            if rgb[2] > 0:
+                rgb[2] -= 1
+                lim = False
+            else:
+                lim = True
+        elif touched(3):
+            if rgb[2] < 255:
+                rgb[2] += 1
+                lim = False
+            else:
+                lim = True
 
-# Clears the display
-def clear():
+        np[9] = rgb
+        if lim:
+            np[0] = (255, 0, 0)
+        else:
+            np[0] = (0, 0, 0)
+        np.write()
+        time.sleep(.0075)
+
+    return rgb
+
+
+def onSuccess():
     for i in range(10):
-        colors[i] = (0,0,0)
-        np[i] = (0,0,0)
-        np.write() 
-        time.sleep(0.02)
+        np[i] = (0, 255, 0)
+    np.write()
+    time.sleep(1)
 
-# Highlights the Des Moines skyline silkscreen and welcome message
-def inital():
-    clear()
-    print("Welcome to BSides Iowa 2019. Press Control+C to exit running program and enter REPL")
-    np[2] = (0,0,50)
-    np[3] = (0,0,50)
-    np[4] = (0,0,50)
-    np[5] = (0,0,50)
+
+def touched(*buttons):
+    ok = 1
+    for i, e in enumerate(buttons):
+        if not pins[e].read() < thresh:
+            ok = False
+
+    return ok
+
+
+def insert(led, lim=9):
+    for i in range(lim):
+        np[i] = np[i + 1]
+    np[lim] = led
+
     np.write()
 
-def play_note(freq: int, play_time: float = .2):
+
+def onReset():
+    for i in range(10):
+        np[i] = (255, 0, 0)
+    np.write()
+    time.sleep(1)
+    for i in range(10):
+        np[i] = (0, 0, 0)
+    np.write()
+
+
+def play_note(freq: int, play_time: float = .2, display=True):
     """
     Plays a note of frequency `freq` for duration `play_time`, and lights up a random LED for fun
     :param freq: The frequency of the note to play, in hz
     :param play_time: The duration of the note, in seconds
+    :param display: Whether to show random colors when the sound is played
     :return: Null
     """
+    global muted
+    if display:
+        insert((random.randrange(0, 150), random.randrange(0, 150), random.randrange(0, 150)))
+        time.sleep(play_time)
+    if muted:
+        return
     speaker.duty(100)
     speaker.freq(freq)
-    stackColor(random.randint(1, 4))
     time.sleep(play_time)
     speaker.duty(0)
-    
-# This function checks the charing stats
+
+
+# This function checks the charging stats
 def battery():
     if hx.value() == 0:
         print("Charged")
     else:
-        print("Charging") 
+        print("Charging")
 
-# An attempt to make this eaiser to flash in bulk
-def flash():
-    print("Ready for flashing")
-    sys.exit()
+
+def zelda():
+    """
+        Play the main theme from Link's awakening.
+        :return:
+        """
+    print("Playing Zelda..")
+
+    play_note(AS5, .314)
+    time.sleep(.091)
+    play_note(F5, .522)
+    play_note(AS5)
+    play_note(AS5)
+    play_note(C6)
+    play_note(D6)
+    play_note(DS6)
+    # 1.19
+    play_note(F6, .506)
+    time.sleep(.507)
+    play_note(F6)
+    time.sleep(.1)
+    play_note(F6)
+    time.sleep(.1)
+    play_note(FS6)
+    play_note(GS6)
+    # 3.07
+    play_note(AS6, .517)
+    # Top of the first swell
+
+    play_note(AS6)
+    time.sleep(.1)
+    play_note(AS6)
+    time.sleep(.1)
+    play_note(GS6)
+    play_note(FS6)
+    # 4.26
+    play_note(GS6, .304)
+    play_note(FS6)
+    play_note(F6, .507)
+    time.sleep(.241)
+    play_note(F6, .304)
+    time.sleep(.1)
+    # 6.15
+    play_note(DS6, .315)
+    play_note(F6)
+    play_note(FS6, .517)
+    time.sleep(.304)
+    play_note(F6)
+    time.sleep(.1)
+    play_note(DS6)
+    time.sleep(.1)
+    # 8.03
+    play_note(CS6)
+    play_note(DS6)
+    play_note(F6, .506)
+    time.sleep(.304)
+    play_note(DS6)
+    time.sleep(.1)
+    play_note(CS6)
+    time.sleep(.1)
+    # 9.22
+    play_note(C6, .304)
+    play_note(D6)
+    play_note(E6, .497)
+    time.sleep(.304)
+    play_note(G6, .314)
+    time.sleep(.1)
+    # 11.11
+    play_note(F6)
+    time.sleep(.1)
+    play_note(math.ceil((AS5 + F5) / 2))
+    time.sleep(.001)
+    play_note(math.ceil((AS5 + F5) / 2))
+    time.sleep(.001)
+    play_note(math.ceil((AS5 + F5) / 2))
+    time.sleep(.1)
+    play_note(math.ceil((AS5 + F5) / 2))
+    time.sleep(.001)
+    play_note(math.ceil((AS5 + F5) / 2))
+    time.sleep(.001)
+    play_note(math.ceil((AS5 + F5) / 2))
+
+    print("Done")
